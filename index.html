@@ -456,8 +456,13 @@
     </div>
 
     <script>
+        // API Base URL - デプロイ後にCloud RunのURLに変更してください
+        const API_BASE_URL = 'https://your-cloudrun-url.a.run.app';
+        
         let selectedPeopleCount = 0;
         let isVipReservation = false;
+        let currentPromoCode = '';
+        let currentReservationId = '';
 
         function showScreen(screenId) {
             document.querySelectorAll('.screen').forEach(screen => {
@@ -466,9 +471,28 @@
             document.getElementById(screenId).classList.add('active');
         }
 
-        function refreshStatus() {
-            alert('待ち状況を更新しました');
+        async function refreshStatus() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/status`);
+                const data = await response.json();
+                
+                if (data.display) {
+                    document.querySelector('#statusScreen .status-number').textContent = data.waiting_groups;
+                    document.querySelector('#statusScreen .status-number[style*="font-size: 36px"]').textContent = `約${data.estimated_time}`;
+                    alert('待ち状況を更新しました');
+                } else {
+                    document.querySelector('#statusScreen .status-number').textContent = '—';
+                    document.querySelector('#statusScreen .status-number[style*="font-size: 36px"]').textContent = '—';
+                    alert('現在待ち状況は表示されていません');
+                }
+            } catch (error) {
+                console.error('Error refreshing status:', error);
+                alert('待ち状況の取得に失敗しました');
+            }
         }
+
+        // ページロード時に待ち状況を取得
+        window.addEventListener('DOMContentLoaded', refreshStatus);
 
         function selectPeople(count) {
             selectedPeopleCount = count;
@@ -486,33 +510,91 @@
             document.getElementById('reserveButton').disabled = !this.checked;
         });
 
-        function completeReservation() {
+        async function completeReservation() {
             if (selectedPeopleCount === 0) {
                 alert('人数を選択してください');
                 return;
             }
 
-            // ランダムな予約番号を生成
-            const prefix = isVipReservation ? 'V' : 'A';
-            const number = Math.floor(1000 + Math.random() * 9000);
-            document.getElementById('reservationNumber').textContent = prefix + number;
+            try {
+                const requestData = {
+                    count: selectedPeopleCount
+                };
 
-            // ランダムな待ち情報を生成
-            document.getElementById('remainingGroups').textContent = Math.floor(5 + Math.random() * 15);
-            document.getElementById('estimatedTime').textContent = Math.floor(20 + Math.random() * 40);
+                // VIP予約の場合
+                if (isVipReservation && currentPromoCode) {
+                    requestData.promo_code = currentPromoCode;
+                    requestData.date = document.getElementById('vipDate').value;
+                    requestData.time = document.getElementById('vipTime').value;
+                }
 
-            showScreen('completeScreen');
+                const response = await fetch(`${API_BASE_URL}/api/reservations`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestData)
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    currentReservationId = data.reservation_id;
+                    document.getElementById('reservationNumber').textContent = data.reservation_id;
+
+                    if (data.is_priority) {
+                        // VIP予約の場合
+                        document.getElementById('remainingGroups').textContent = '—';
+                        document.getElementById('estimatedTime').textContent = data.time;
+                    } else {
+                        // 通常予約の場合
+                        document.getElementById('remainingGroups').textContent = data.waiting_groups;
+                        document.getElementById('estimatedTime').textContent = data.estimated_time;
+                    }
+
+                    showScreen('completeScreen');
+                } else {
+                    alert(data.error || '予約に失敗しました');
+                }
+            } catch (error) {
+                console.error('Error creating reservation:', error);
+                alert('予約の作成に失敗しました');
+            }
         }
 
-        function updateWaitingInfo() {
-            document.getElementById('remainingGroups').textContent = Math.floor(5 + Math.random() * 15);
-            document.getElementById('estimatedTime').textContent = Math.floor(20 + Math.random() * 40);
-            alert('待ち状況を更新しました');
+        async function updateWaitingInfo() {
+            if (!currentReservationId) {
+                alert('予約情報がありません');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/reservations/${currentReservationId}`);
+                const data = await response.json();
+
+                if (response.ok) {
+                    if (data.is_priority) {
+                        document.getElementById('remainingGroups').textContent = '—';
+                        document.getElementById('estimatedTime').textContent = data.time;
+                    } else {
+                        document.getElementById('remainingGroups').textContent = data.waiting_groups;
+                        document.getElementById('estimatedTime').textContent = data.estimated_time;
+                    }
+                    alert('待ち状況を更新しました');
+                } else {
+                    alert('予約情報の取得に失敗しました');
+                }
+            } catch (error) {
+                console.error('Error updating waiting info:', error);
+                alert('待ち状況の更新に失敗しました');
+            }
         }
 
         function resetForm() {
             selectedPeopleCount = 0;
             isVipReservation = false;
+            currentPromoCode = '';
+            currentReservationId = '';
             document.querySelectorAll('.people-button').forEach(btn => {
                 btn.classList.remove('selected');
             });
@@ -527,19 +609,62 @@
             showScreen('promoScreen');
         });
 
-        function validatePromoCode() {
+        async function validatePromoCode() {
             const code = document.getElementById('promoCodeInput').value.trim();
             if (code === '') {
                 alert('プロモーションコードを入力してください');
                 return;
             }
             
-            // ダミー検証（実際はバックエンドで検証）
-            if (code.length >= 6) {
-                isVipReservation = true;
-                showScreen('vipDateTimeScreen');
-            } else {
-                alert('有効なプロモーションコードを入力してください');
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/promo/validate`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ code: code })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.valid) {
+                    currentPromoCode = code;
+                    isVipReservation = true;
+                    
+                    // 利用可能な日時を取得
+                    await loadAvailableSlots();
+                    showScreen('vipDateTimeScreen');
+                } else {
+                    alert(data.message || '有効なプロモーションコードを入力してください');
+                }
+            } catch (error) {
+                console.error('Error validating promo code:', error);
+                alert('プロモーションコードの検証に失敗しました');
+            }
+        }
+
+        async function loadAvailableSlots() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/vip/available-slots`);
+                const data = await response.json();
+                
+                const dateSelect = document.getElementById('vipDate');
+                dateSelect.innerHTML = '';
+                
+                if (data.dates && data.dates.length > 0) {
+                    data.dates.forEach(date => {
+                        const option = document.createElement('option');
+                        option.value = date.date;
+                        option.textContent = date.label;
+                        dateSelect.appendChild(option);
+                    });
+                } else {
+                    alert('現在予約可能な日時がありません');
+                    showScreen('statusScreen');
+                }
+            } catch (error) {
+                console.error('Error loading available slots:', error);
+                alert('日時情報の取得に失敗しました');
             }
         }
 
