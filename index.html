@@ -223,6 +223,25 @@
             font-size: 14px;
         }
 
+        .promo-link {
+            text-align: center;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .promo-link a {
+            color: #666666;
+            text-decoration: none;
+            font-size: 13px;
+            transition: color 0.2s;
+        }
+
+        .promo-link a:hover {
+            color: #000000;
+            text-decoration: underline;
+        }
+
         .promo-input-group {
             margin-bottom: 30px;
         }
@@ -254,6 +273,23 @@
 
         .screen.active {
             display: block;
+        }
+
+        .loading-message {
+            text-align: center;
+            padding: 20px;
+            color: #666666;
+            font-size: 14px;
+        }
+
+        .error-message {
+            background: #ffebee;
+            border: 2px solid #c62828;
+            padding: 20px;
+            margin-bottom: 20px;
+            color: #c62828;
+            font-size: 14px;
+            text-align: center;
         }
 
         @media (max-width: 480px) {
@@ -303,7 +339,10 @@
 
             <button class="button secondary" onclick="refreshStatus()">現在の待ち状況を更新</button>
             <button class="button" onclick="showScreen('peopleScreen')">予約開始</button>
-            <button class="button secondary" id="promoLinkBtn">プロモーションコードをお持ちの方</button>
+            
+            <div class="promo-link">
+                <a href="#" id="promoLinkBtn">プロモーションコードをお持ちの方はこちら</a>
+            </div>
         </div>
 
         <!-- プロモーションコード入力画面 -->
@@ -325,19 +364,26 @@
         <div id="vipDateTimeScreen" class="screen">
             <h2 style="margin-bottom: 30px; font-size: 20px;">日時を選択</h2>
             
-            <div class="date-time-select">
+            <div id="loadingSlots" class="loading-message">
+                予約可能な時間枠を読み込み中...
+            </div>
+
+            <div id="noSlotsAvailable" class="error-message" style="display: none;">
+                現在、予約可能な時間枠がありません
+            </div>
+
+            <div id="dateTimeSelects" class="date-time-select" style="display: none;">
                 <div class="promo-input-group">
                     <label>日付</label>
                     <select id="vipDate">
-                        <option value="2024-11-01">11月1日（金）</option>
-                        <option value="2024-11-02">11月2日（土）</option>
+                        <option value="">読み込み中...</option>
                     </select>
                 </div>
 
                 <div class="promo-input-group">
                     <label>希望時刻</label>
                     <select id="vipTime">
-                        <option value="">読み込み中...</option>
+                        <option value="">日付を選択してください</option>
                     </select>
                 </div>
             </div>
@@ -345,9 +391,10 @@
             <div class="notice-box">
                 <div class="notice-title">⭐ 関係者枠での予約</div>
                 <p>プロモーションコードをご利用いただくと、指定された時刻に優先的にご案内いたします。</p>
+                <p style="margin-top: 10px;">※ 各時間枠には限りがあります。満席の場合は別の時間をお選びください。</p>
             </div>
 
-            <button class="button" onclick="showScreen('peopleScreen')">次へ</button>
+            <button class="button" id="vipNextButton" onclick="showScreen('peopleScreen')" style="display: none;">次へ</button>
             <div class="back-link">
                 <a href="#" onclick="showScreen('promoScreen'); return false;">← 戻る</a>
             </div>
@@ -443,6 +490,29 @@
         let currentReservationId = '';
         let availableSlotsData = null;
 
+        // 時間枠生成関数（10:00-14:30、15分間隔）
+        function generateTimeSlots() {
+            const slots = [];
+            const startHour = 10;
+            const startMinute = 0;
+            const endHour = 14;
+            const endMinute = 30;
+            
+            for (let hour = startHour; hour <= endHour; hour++) {
+                for (let minute = 0; minute < 60; minute += 15) {
+                    // 14:30以降は追加しない
+                    if (hour === endHour && minute > endMinute) {
+                        break;
+                    }
+                    
+                    const timeStr = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+                    slots.push(timeStr);
+                }
+            }
+            
+            return slots;
+        }
+
         function showScreen(screenId) {
             document.querySelectorAll('.screen').forEach(screen => {
                 screen.classList.remove('active');
@@ -501,9 +571,17 @@
 
                 // VIP予約の場合
                 if (isVipReservation && currentPromoCode) {
+                    const selectedDate = document.getElementById('vipDate').value;
+                    const selectedTime = document.getElementById('vipTime').value;
+                    
+                    if (!selectedDate || !selectedTime) {
+                        alert('日時を選択してください');
+                        return;
+                    }
+                    
                     requestData.promo_code = currentPromoCode;
-                    requestData.date = document.getElementById('vipDate').value;
-                    requestData.time = document.getElementById('vipTime').value;
+                    requestData.date = selectedDate;
+                    requestData.time = selectedTime;
                 }
 
                 const response = await fetch(`${API_BASE_URL}/api/reservations`, {
@@ -587,7 +665,8 @@
             document.getElementById('promoCodeInput').value = '';
         }
 
-        document.getElementById('promoLinkBtn').addEventListener('click', function() {
+        document.getElementById('promoLinkBtn').addEventListener('click', function(e) {
+            e.preventDefault();
             showScreen('promoScreen');
         });
 
@@ -625,37 +704,63 @@
         }
 
         async function loadAvailableSlots() {
+            const loadingDiv = document.getElementById('loadingSlots');
+            const noSlotsDiv = document.getElementById('noSlotsAvailable');
+            const selectsDiv = document.getElementById('dateTimeSelects');
+            const nextButton = document.getElementById('vipNextButton');
+            
+            loadingDiv.style.display = 'block';
+            noSlotsDiv.style.display = 'none';
+            selectsDiv.style.display = 'none';
+            nextButton.style.display = 'none';
+            
             try {
                 const response = await fetch(`${API_BASE_URL}/api/vip/available-slots`);
                 const data = await response.json();
                 
                 console.log('Available slots data:', data);
                 
-                availableSlotsData = data.dates;
+                loadingDiv.style.display = 'none';
+                
+                if (!data.dates || data.dates.length === 0) {
+                    noSlotsDiv.style.display = 'block';
+                    return;
+                }
+                
+                // 空き枠がある日付のみをフィルタリング
+                const datesWithAvailability = data.dates.filter(date => {
+                    return date.times && date.times.length > 0;
+                });
+                
+                if (datesWithAvailability.length === 0) {
+                    noSlotsDiv.style.display = 'block';
+                    return;
+                }
+                
+                availableSlotsData = datesWithAvailability;
                 
                 const dateSelect = document.getElementById('vipDate');
-                dateSelect.innerHTML = '';
+                dateSelect.innerHTML = '<option value="">日付を選択してください</option>';
                 
-                if (data.dates && data.dates.length > 0) {
-                    data.dates.forEach(date => {
-                        const option = document.createElement('option');
-                        option.value = date.date;
-                        option.textContent = date.label;
-                        dateSelect.appendChild(option);
-                    });
-                    
-                    // 日付変更時のイベントリスナーを追加
-                    dateSelect.addEventListener('change', updateTimeSlots);
-                    
-                    // 初回の時間枠を表示
-                    updateTimeSlots();
-                } else {
-                    alert('現在予約可能な日時がありません');
-                    showScreen('statusScreen');
-                }
+                datesWithAvailability.forEach(date => {
+                    const option = document.createElement('option');
+                    option.value = date.date;
+                    option.textContent = date.label;
+                    dateSelect.appendChild(option);
+                });
+                
+                selectsDiv.style.display = 'grid';
+                nextButton.style.display = 'block';
+                
+                // 日付変更時のイベントリスナーを追加
+                dateSelect.removeEventListener('change', updateTimeSlots);
+                dateSelect.addEventListener('change', updateTimeSlots);
+                
             } catch (error) {
                 console.error('Error loading available slots:', error);
-                alert('日時情報の取得に失敗しました');
+                loadingDiv.style.display = 'none';
+                noSlotsDiv.style.display = 'block';
+                noSlotsDiv.textContent = '日時情報の取得に失敗しました';
             }
         }
         
@@ -665,13 +770,18 @@
             
             console.log('Updating time slots for date:', selectedDate);
             
+            if (!selectedDate) {
+                timeSelect.innerHTML = '<option value="">日付を選択してください</option>';
+                return;
+            }
+            
             // 選択された日付のデータを取得
             const dateData = availableSlotsData.find(d => d.date === selectedDate);
             
             console.log('Date data:', dateData);
             
-            if (dateData && dateData.times) {
-                timeSelect.innerHTML = '';
+            if (dateData && dateData.times && dateData.times.length > 0) {
+                timeSelect.innerHTML = '<option value="">時刻を選択してください</option>';
                 dateData.times.forEach(time => {
                     const option = document.createElement('option');
                     option.value = time;
@@ -680,10 +790,8 @@
                 });
                 
                 console.log('Available times:', dateData.times);
-                
-                if (dateData.times.length === 0) {
-                    timeSelect.innerHTML = '<option value="">空き枠がありません</option>';
-                }
+            } else {
+                timeSelect.innerHTML = '<option value="">空き枠がありません</option>';
             }
         }
 
