@@ -303,11 +303,16 @@
         <div id="statusScreen" class="screen active">
             <div class="status-card">
                 <div class="status-info">現在の待ち組数</div>
-                <div class="status-number">更新中</div>
+                <div class="status-number" id="waitingGroups">更新中</div>
                 <div class="status-label">組</div>
+                <div style="margin-top: 10px;">
+                    <div class="status-info">現在の待ち人数</div>
+                    <div class="status-number" style="font-size: 36px;" id="waitingPeople">更新中</div>
+                    <div class="status-label">人</div>
+                </div>
                 <div style="margin-top: 20px;">
                     <div class="status-info">推定待ち時間</div>
-                    <div class="status-number" style="font-size: 36px;">更新中</div>
+                    <div class="status-number" style="font-size: 36px;" id="estimatedTime">更新中</div>
                     <div class="status-label">分</div>
                 </div>
             </div>
@@ -393,7 +398,7 @@
                         <span id="selectedPeople">0</span>人
                     </p>
                     <p style="margin-bottom: 10px;">
-                        呼び出しまでに<strong>2101（2棟1階の奥から2番目の教室）</strong>へお越しください。
+                        呼び出しまでに<strong>2棟2階の一番奥</strong>へお越しください。
                     </p>
                     <p style="margin-bottom: 10px;">
                         呼出後10分経過後おいでにならない場合は他のお客様をご案内いたします。
@@ -402,7 +407,7 @@
                         30分経ってもおいでにならない場合は自動キャンセルとなります。
                     </p>
                     <p>
-                        3人以下でご予約の場合、他のお客様と同じグループとなり参加していただく場合がございます。予めご了承ください。
+                        3人以下でご予約の場合、他のお客様と同じグループとなり参加していただきます。
                     </p>
                 </div>
 
@@ -432,7 +437,7 @@
                 </div>
                 <div class="info-item">
                     <div class="info-item-label">推定待ち時間</div>
-                    <div class="info-item-value">約 <span id="estimatedTime">30</span> 分</div>
+                    <div class="info-item-value">約 <span id="estimatedTime2">30</span> 分</div>
                 </div>
             </div>
 
@@ -456,7 +461,7 @@
     </div>
 
     <script>
-        // API Base URL - デプロイ後にCloud RunのURLに変更してください
+        // API Base URL
         const API_BASE_URL = 'https://kunugida-reservation-api-pv3b3g64na-an.a.run.app';
         
         let selectedPeopleCount = 0;
@@ -477,17 +482,16 @@
                 const data = await response.json();
                 
                 if (data.display) {
-                    document.querySelector('#statusScreen .status-number').textContent = data.waiting_groups;
-                    document.querySelector('#statusScreen .status-number[style*="font-size: 36px"]').textContent = `約${data.estimated_time}`;
-                    alert('待ち状況を更新しました');
+                    document.getElementById('waitingGroups').textContent = data.waiting_groups;
+                    document.getElementById('waitingPeople').textContent = data.waiting_people || 0;
+                    document.getElementById('estimatedTime').textContent = `約${data.estimated_time}`;
                 } else {
-                    document.querySelector('#statusScreen .status-number').textContent = '—';
-                    document.querySelector('#statusScreen .status-number[style*="font-size: 36px"]').textContent = '—';
-                    alert('現在待ち状況は表示されていません');
+                    document.getElementById('waitingGroups').textContent = '—';
+                    document.getElementById('waitingPeople').textContent = '—';
+                    document.getElementById('estimatedTime').textContent = '—';
                 }
             } catch (error) {
                 console.error('Error refreshing status:', error);
-                alert('待ち状況の取得に失敗しました');
             }
         }
 
@@ -543,13 +547,11 @@
                     document.getElementById('reservationNumber').textContent = data.reservation_id;
 
                     if (data.is_priority) {
-                        // VIP予約の場合
                         document.getElementById('remainingGroups').textContent = '—';
-                        document.getElementById('estimatedTime').textContent = data.time;
+                        document.getElementById('estimatedTime2').textContent = data.time;
                     } else {
-                        // 通常予約の場合
                         document.getElementById('remainingGroups').textContent = data.waiting_groups;
-                        document.getElementById('estimatedTime').textContent = data.estimated_time;
+                        document.getElementById('estimatedTime2').textContent = data.estimated_time;
                     }
 
                     showScreen('completeScreen');
@@ -564,7 +566,6 @@
 
         async function updateWaitingInfo() {
             if (!currentReservationId) {
-                alert('予約情報がありません');
                 return;
             }
 
@@ -575,18 +576,14 @@
                 if (response.ok) {
                     if (data.is_priority) {
                         document.getElementById('remainingGroups').textContent = '—';
-                        document.getElementById('estimatedTime').textContent = data.time;
+                        document.getElementById('estimatedTime2').textContent = data.time;
                     } else {
                         document.getElementById('remainingGroups').textContent = data.waiting_groups;
-                        document.getElementById('estimatedTime').textContent = data.estimated_time;
+                        document.getElementById('estimatedTime2').textContent = data.estimated_time;
                     }
-                    alert('待ち状況を更新しました');
-                } else {
-                    alert('予約情報の取得に失敗しました');
                 }
             } catch (error) {
                 console.error('Error updating waiting info:', error);
-                alert('待ち状況の更新に失敗しました');
             }
         }
 
@@ -631,7 +628,6 @@
                     currentPromoCode = code;
                     isVipReservation = true;
                     
-                    // 利用可能な日時を取得
                     await loadAvailableSlots();
                     showScreen('vipDateTimeScreen');
                 } else {
