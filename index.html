@@ -431,13 +431,13 @@
             <div class="reservation-number" id="reservationNumber">A1234</div>
 
             <div class="info-grid">
-                <div class="info-item">
+                <div class="info-item" id="remainingGroupsItem">
                     <div class="info-item-label">あと</div>
                     <div class="info-item-value"><span id="remainingGroups">8</span> 組</div>
                 </div>
                 <div class="info-item">
-                    <div class="info-item-label">推定待ち時間</div>
-                    <div class="info-item-value">約 <span id="estimatedTime2">30</span> 分</div>
+                    <div class="info-item-label" id="timeLabel">推定待ち時間</div>
+                    <div class="info-item-value"><span id="estimatedTime2">30</span> <span id="timeUnit">分</span></div>
                 </div>
             </div>
 
@@ -547,11 +547,18 @@
                     document.getElementById('reservationNumber').textContent = data.reservation_id;
 
                     if (data.is_priority) {
-                        document.getElementById('remainingGroups').textContent = '—';
+                        // VIP予約の場合
+                        document.getElementById('remainingGroupsItem').style.display = 'none';
+                        document.getElementById('timeLabel').textContent = '予約時間';
                         document.getElementById('estimatedTime2').textContent = data.time;
+                        document.getElementById('timeUnit').textContent = '';
                     } else {
+                        // 通常予約の場合
+                        document.getElementById('remainingGroupsItem').style.display = 'block';
+                        document.getElementById('timeLabel').textContent = '推定待ち時間';
                         document.getElementById('remainingGroups').textContent = data.waiting_groups;
-                        document.getElementById('estimatedTime2').textContent = data.estimated_time;
+                        document.getElementById('estimatedTime2').textContent = `約${data.estimated_time}`;
+                        document.getElementById('timeUnit').textContent = '分';
                     }
 
                     showScreen('completeScreen');
@@ -575,11 +582,16 @@
 
                 if (response.ok) {
                     if (data.is_priority) {
-                        document.getElementById('remainingGroups').textContent = '—';
+                        document.getElementById('remainingGroupsItem').style.display = 'none';
+                        document.getElementById('timeLabel').textContent = '予約時間';
                         document.getElementById('estimatedTime2').textContent = data.time;
+                        document.getElementById('timeUnit').textContent = '';
                     } else {
+                        document.getElementById('remainingGroupsItem').style.display = 'block';
+                        document.getElementById('timeLabel').textContent = '推定待ち時間';
                         document.getElementById('remainingGroups').textContent = data.waiting_groups;
-                        document.getElementById('estimatedTime2').textContent = data.estimated_time;
+                        document.getElementById('estimatedTime2').textContent = `約${data.estimated_time}`;
+                        document.getElementById('timeUnit').textContent = '分';
                     }
                 }
             } catch (error) {
