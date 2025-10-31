@@ -391,7 +391,6 @@ h1 {
     <div class="container">
         <header>
             <h1>秘宝タン・イーと記憶の洞窟</h1>
-            <p class="subtitle">サブタイトル</p>
         </header>
 
         <!-- 待ち状況表示画面 -->
@@ -615,14 +614,23 @@ h1 {
                 const response = await fetch(`${API_BASE_URL}/api/settings`);
                 
                 if (!response.ok) {
-                    console.error('Failed to fetch settings');
-                    receptionEnabled = false;
-                    showReceptionClosed();
+                    console.warn('Failed to fetch settings, defaulting to reception=true');
+                    // APIエラー時はデフォルトで受付可能にする
+                    receptionEnabled = true;
+                    showReceptionOpen();
                     return;
                 }
                 
                 const data = await response.json();
+                
+                // デバッグ用ログ
+                console.log('Settings response:', data);
+                console.log('reception value:', data.reception, 'type:', typeof data.reception);
+                
+                // reception が明示的に false の場合のみ受付停止
                 receptionEnabled = data.reception !== false;
+                
+                console.log('receptionEnabled:', receptionEnabled);
                 
                 if (!receptionEnabled) {
                     showReceptionClosed();
@@ -630,9 +638,10 @@ h1 {
                     showReceptionOpen();
                 }
             } catch (error) {
-                console.error('Error checking settings:', error);
-                receptionEnabled = false;
-                showReceptionClosed();
+                console.warn('Error checking settings, defaulting to reception=true:', error);
+                // エラー時はデフォルトで受付可能にする
+                receptionEnabled = true;
+                showReceptionOpen();
             }
         }
 
