@@ -396,27 +396,39 @@ h1 {
 
         <!-- 待ち状況表示画面 -->
         <div id="statusScreen" class="screen active">
-            <div class="status-card">
-                <div class="status-info">現在の待ち組数</div>
-                <div class="status-number" id="waitingGroups">更新中</div>
-                <div class="status-label">組</div>
-                <div style="margin-top: 10px;">
-                    <div class="status-info">現在の待ち人数</div>
-                    <div class="status-number" style="font-size: 36px;" id="waitingPeople">更新中</div>
-                    <div class="status-label">人</div>
+            <!-- 予約停止中メッセージ（全画面表示） -->
+            <div id="receptionClosedMessage" class="notice-box" style="display: none; background: #ffebee; border-color: #f44336; padding: 60px 40px; text-align: center; margin-bottom: 0;">
+                <div style="font-size: 64px; margin-bottom: 30px;">⚠️</div>
+                <div style="font-size: 32px; font-weight: 700; color: #d32f2f; margin-bottom: 20px; line-height: 1.4;">
+                    ただいま予約受付時間外です
                 </div>
-                <div style="margin-top: 20px;">
-                    <div class="status-info">推定待ち時間</div>
-                    <div class="status-number" style="font-size: 36px;" id="estimatedTime">更新中</div>
-                    <div class="status-label">分</div>
-                </div>
+                <p style="color: #d32f2f; font-size: 18px; margin-top: 20px;">受付時間内に再度アクセスしてください</p>
             </div>
 
-            <button class="button secondary" onclick="refreshStatus()">現在の待ち状況を更新</button>
-            <button class="button" onclick="showScreen('peopleScreen')">予約開始</button>
-            
-            <div class="promo-link">
-                <a href="#" id="promoLinkBtn">プロモーションコードをお持ちの方はこちら</a>
+            <!-- 通常の待ち状況表示（reception=trueの時のみ表示） -->
+            <div id="statusContent">
+                <div class="status-card">
+                    <div class="status-info">現在の待ち組数</div>
+                    <div class="status-number" id="waitingGroups">更新中</div>
+                    <div class="status-label">組</div>
+                    <div style="margin-top: 10px;">
+                        <div class="status-info">現在の待ち人数</div>
+                        <div class="status-number" style="font-size: 36px;" id="waitingPeople">更新中</div>
+                        <div class="status-label">人</div>
+                    </div>
+                    <div style="margin-top: 20px;">
+                        <div class="status-info">推定待ち時間</div>
+                        <div class="status-number" style="font-size: 36px;" id="estimatedTime">更新中</div>
+                        <div class="status-label">分</div>
+                    </div>
+                </div>
+
+                <button class="button secondary" onclick="refreshStatus()">現在の待ち状況を更新</button>
+                <button class="button" id="reserveStartButton" onclick="checkReceptionAndStart()">予約開始</button>
+                
+                <div class="promo-link">
+                    <a href="#" id="promoLinkBtn">プロモーションコードをお持ちの方はこちら</a>
+                </div>
             </div>
         </div>
 
@@ -565,6 +577,7 @@ h1 {
         let currentPromoCode = '';
         let currentReservationId = '';
         let availableSlotsData = null;
+        let receptionEnabled = true;
 
         // 時間枠生成関数（10:00-14:30、15分間隔）
         function generateTimeSlots() {
@@ -596,6 +609,60 @@ h1 {
             document.getElementById(screenId).classList.add('active');
         }
 
+        // 設定を取得してreception状態をチェック
+        async function checkSettings() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/settings`);
+                
+                if (!response.ok) {
+                    console.error('Failed to fetch settings');
+                    receptionEnabled = false;
+                    showReceptionClosed();
+                    return;
+                }
+                
+                const data = await response.json();
+                receptionEnabled = data.reception !== false;
+                
+                if (!receptionEnabled) {
+                    showReceptionClosed();
+                } else {
+                    showReceptionOpen();
+                }
+            } catch (error) {
+                console.error('Error checking settings:', error);
+                receptionEnabled = false;
+                showReceptionClosed();
+            }
+        }
+
+        // 受付停止時の表示
+        function showReceptionClosed() {
+            const closedMessage = document.getElementById('receptionClosedMessage');
+            const statusContent = document.getElementById('statusContent');
+            
+            closedMessage.style.display = 'block';
+            statusContent.style.display = 'none';
+        }
+
+        // 受付中の表示
+        function showReceptionOpen() {
+            const closedMessage = document.getElementById('receptionClosedMessage');
+            const statusContent = document.getElementById('statusContent');
+            
+            closedMessage.style.display = 'none';
+            statusContent.style.display = 'block';
+        }
+
+        // 予約開始ボタンのチェック
+        function checkReceptionAndStart() {
+            if (!receptionEnabled) {
+                alert('ただいま予約受付時間外です。');
+                return;
+            }
+            showScreen('peopleScreen');
+        }
+
         async function refreshStatus() {
             try {
                 const response = await fetch(`${API_BASE_URL}/api/status`);
@@ -615,8 +682,14 @@ h1 {
             }
         }
 
-        // ページロード時に待ち状況を取得
-        window.addEventListener('DOMContentLoaded', refreshStatus);
+        // ページロード時に設定確認を最優先で実行
+        window.addEventListener('DOMContentLoaded', function() {
+            checkSettings().then(() => {
+                if (receptionEnabled) {
+                    refreshStatus();
+                }
+            });
+        });
 
         function selectPeople(count) {
             selectedPeopleCount = count;
@@ -743,6 +816,10 @@ h1 {
 
         document.getElementById('promoLinkBtn').addEventListener('click', function(e) {
             e.preventDefault();
+            if (!receptionEnabled) {
+                alert('ただいま予約受付時間外です。');
+                return;
+            }
             showScreen('promoScreen');
         });
 
